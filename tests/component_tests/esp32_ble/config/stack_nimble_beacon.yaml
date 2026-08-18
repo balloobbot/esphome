@@ -1,0 +1,14 @@
+esphome:
+  name: test
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+esp32_ble:
+  stack: nimble
+
+esp32_ble_beacon:
+  type: iBeacon
+  uuid: c29ce823-e67a-4e71-bff2-abaa32e77a98

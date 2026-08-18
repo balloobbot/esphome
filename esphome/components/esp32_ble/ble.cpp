@@ -6,6 +6,9 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 
+#ifdef USE_ESP32_BLE_NIMBLE
+#include "nimble_compat_internal.h"
+#else
 #ifndef CONFIG_ESP_HOSTED_ENABLE_BT_BLUEDROID
 #include <esp_bt.h>
 #else
@@ -19,7 +22,8 @@ extern "C" {
 #endif
 #include <esp_bt_device.h>
 #include <esp_bt_main.h>
-#include <esp_gap_ble_api.h>
+#endif  // USE_ESP32_BLE_NIMBLE
+#include "ble_stack_api.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/FreeRTOSConfig.h>
 #include <freertos/task.h>
@@ -180,6 +184,12 @@ void ESP32BLE::advertising_init_() {
 
 bool ESP32BLE::ble_setup_() {
   esp_err_t err;
+#ifdef USE_ESP32_BLE_NIMBLE
+  if (!nimble_compat::host_setup()) {
+    ESP_LOGE(TAG, "NimBLE host setup failed");
+    return false;
+  }
+#else
 #ifdef CONFIG_ESP_HOSTED_ENABLE_BT_BLUEDROID
   watchdog::WatchdogManager wdt(HOSTED_BT_WDT_TIMEOUT_MS);
 #endif
@@ -263,6 +273,7 @@ bool ESP32BLE::ble_setup_() {
     ESP_LOGE(TAG, "esp_bluedroid_enable failed: %d", err);
     return false;
   }
+#endif  // USE_ESP32_BLE_NIMBLE
 
 #ifdef ESPHOME_ESP32_BLE_GAP_EVENT_HANDLER_COUNT
   err = esp_ble_gap_register_callback(ESP32BLE::gap_event_handler);
@@ -371,6 +382,9 @@ bool ESP32BLE::ble_setup_() {
 }
 
 bool ESP32BLE::ble_dismantle_() {
+#ifdef USE_ESP32_BLE_NIMBLE
+  return nimble_compat::host_teardown();
+#else
 #ifdef CONFIG_ESP_HOSTED_ENABLE_BT_BLUEDROID
   // Same 5 second RPCs as the bring-up path; see HOSTED_BT_WDT_TIMEOUT_MS
   watchdog::WatchdogManager wdt(HOSTED_BT_WDT_TIMEOUT_MS);
@@ -432,6 +446,7 @@ bool ESP32BLE::ble_dismantle_() {
   hosted_hci_bluedroid_close();
 #endif
   return true;
+#endif  // USE_ESP32_BLE_NIMBLE
 }
 
 void ESP32BLE::loop() {

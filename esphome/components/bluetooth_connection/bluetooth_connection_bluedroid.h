@@ -15,8 +15,7 @@
 #include "esphome/components/esp32_ble_tracker/esp32_ble_tracker.h"
 #include "esphome/core/component.h"
 
-#include <esp_gap_ble_api.h>
-#include <esp_gattc_api.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 
 namespace esphome::bluetooth_connection {
 

@@ -6,8 +6,7 @@
 #ifndef CONFIG_ESP_HOSTED_ENABLE_BT_BLUEDROID
 #include <esp_bt.h>
 #endif
-#include <esp_bt_main.h>
-#include <esp_gap_ble_api.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <nvs_flash.h>

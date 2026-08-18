@@ -339,11 +339,13 @@ async def to_code(config):
     request_bluetooth()
     if config.get(CONF_SOFTWARE_COEXISTENCE):
         request_software_coexistence()
-    # https://github.com/espressif/esp-idf/issues/4101
-    # https://github.com/espressif/esp-idf/issues/2503
-    # Match arduino CONFIG_BTU_TASK_STACK_SIZE
-    # https://github.com/espressif/arduino-esp32/blob/fd72cf46ad6fc1a6de99c1d83ba8eba17d80a4ee/tools/sdk/esp32/sdkconfig#L1866
-    add_idf_sdkconfig_option("CONFIG_BT_BTU_TASK_STACK_SIZE", 8192)
+    # NimBLE has no BTU task; its host task stack is sized in esp32_ble.
+    if esp32_ble.get_stack() != esp32_ble.STACK_NIMBLE:
+        # https://github.com/espressif/esp-idf/issues/4101
+        # https://github.com/espressif/esp-idf/issues/2503
+        # Match arduino CONFIG_BTU_TASK_STACK_SIZE
+        # https://github.com/espressif/arduino-esp32/blob/fd72cf46ad6fc1a6de99c1d83ba8eba17d80a4ee/tools/sdk/esp32/sdkconfig#L1866
+        add_idf_sdkconfig_option("CONFIG_BT_BTU_TASK_STACK_SIZE", 8192)
     # Note: CONFIG_BT_ACL_CONNECTIONS and CONFIG_BTDM_CTRL_BLE_MAX_CONN are now
     # configured in esp32_ble component based on max_connections setting
 

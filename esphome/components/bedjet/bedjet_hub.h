@@ -16,7 +16,7 @@
 #include "esphome/core/time.h"
 #endif
 
-#include <esp_gattc_api.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 
 namespace esphome::bedjet {
 

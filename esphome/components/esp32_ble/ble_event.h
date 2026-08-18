@@ -4,9 +4,7 @@
 
 #include <cstddef>  // for offsetof
 #include <cstring>  // for memcpy
-#include <esp_gap_ble_api.h>
-#include <esp_gattc_api.h>
-#include <esp_gatts_api.h>
+#include "ble_stack_api.h"
 
 #include "ble_scan_result.h"
 

@@ -7,11 +7,7 @@
 
 #ifdef USE_ESP32
 
-#include <esp_bt_defs.h>
-#include <esp_gap_ble_api.h>
-#include <esp_gatt_defs.h>
-#include <esp_gattc_api.h>
-#include <esp_gatts_api.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 
 namespace esphome::esp32_ble_server {
 

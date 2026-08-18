@@ -6,7 +6,7 @@
 #include "esphome/components/switch/switch.h"
 
 #ifdef USE_ESP32
-#include <esp_gattc_api.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 
 namespace esphome::ble_client {
 

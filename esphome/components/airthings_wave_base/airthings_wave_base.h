@@ -5,7 +5,7 @@
 
 #ifdef USE_ESP32
 
-#include <esp_gattc_api.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 #include <algorithm>
 #include <iterator>
 #include "esphome/components/ble_client/ble_client.h"

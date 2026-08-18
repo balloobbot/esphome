@@ -1,8 +1,7 @@
 #include "bluetooth_connection.h"
 
 #ifdef USE_ESP32
-#include <esp_gap_ble_api.h>
-#include <esp_gattc_api.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 #endif
 
 #ifdef USE_BLUETOOTH_PROXY_CONNECTIONS

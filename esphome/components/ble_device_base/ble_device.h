@@ -30,7 +30,7 @@
 // Historical esp32_ble API surface (below, under the same define) uses the
 // ESP-IDF UUID/address/scan-result types directly; never referenced off-esp32.
 #include "esphome/components/esp32_ble/ble_scan_result.h"
-#include <esp_bt_defs.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 #endif
 
 namespace esphome::ble_device_base {

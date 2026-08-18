@@ -304,6 +304,9 @@
 #define USE_WIFI_SCAN_RESULTS_LOCK
 #define USE_ESP32_BLE
 #define USE_ESP32_BLE_MAX_CONNECTIONS 3
+// USE_ESP32_BLE_NIMBLE selects the NimBLE host stack; not defined here because
+// static analysis covers the default Bluedroid arm.
+#define USE_ESP32_BLE_CONNECTION_TIMEOUT_MS 20000
 #define USE_ESP32_BLE_CLIENT
 #define USE_ESP32_BLE_DEVICE
 #define USE_ESP32_BLE_SERVER

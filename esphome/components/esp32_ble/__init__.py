@@ -265,6 +265,12 @@ CONF_ADVERTISING_CYCLE_TIME = "advertising_cycle_time"
 CONF_DISABLE_BT_LOGS = "disable_bt_logs"
 CONF_CONNECTION_TIMEOUT = "connection_timeout"
 CONF_MAX_NOTIFICATIONS = "max_notifications"
+CONF_STACK = "stack"
+
+# Host stack choices. Bluedroid is the default; NimBLE is opt-in and uses a
+# Bluedroid-shaped compatibility facade so consumers are unchanged.
+STACK_BLUEDROID = "bluedroid"
+STACK_NIMBLE = "nimble"
 
 # BLE connection limits
 # ESP-IDF CONFIG_BT_ACL_CONNECTIONS has range 1-9, default 4
@@ -318,6 +324,27 @@ AUTH_REQ_MODE = {
     "sc_mitm_bond": AuthReqMode.AUTH_REQ_SC_MITM_BOND,
 }
 
+
+def _validate_stack_choice(value: str) -> str:
+    if value == STACK_NIMBLE:
+        cv.only_with_framework("esp-idf")(value)
+    return value
+
+
+def get_stack(full_config: ConfigType | None = None) -> str:
+    """Return the selected host stack ("bluedroid" or "nimble").
+
+    Pass the full config when called from final validation; defaults to
+    CORE.config for use from to_code.
+    """
+    if full_config is None:
+        full_config = CORE.config
+    conf = full_config.get(DOMAIN)
+    if not conf:
+        return STACK_BLUEDROID
+    return conf.get(CONF_STACK, STACK_BLUEDROID)
+
+
 esp_power_level_t = cg.global_ns.enum("esp_power_level_t")
 
 TX_POWER_LEVELS = {
@@ -361,6 +388,10 @@ CONFIG_SCHEMA = cv.Schema(
         ),
         cv.Optional(CONF_USE_PSRAM): cv.All(
             cv.only_on_esp32, cv.requires_component("psram"), cv.boolean
+        ),
+        cv.Optional(CONF_STACK, default=STACK_BLUEDROID): cv.All(
+            cv.one_of(STACK_BLUEDROID, STACK_NIMBLE, lower=True),
+            _validate_stack_choice,
         ),
     }
 ).extend(cv.COMPONENT_SCHEMA)
@@ -471,8 +502,14 @@ def final_validation(config) -> None:
     max_connections = config.get(CONF_MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS)
     validate_connection_slots(max_connections)
 
+    stack = config[CONF_STACK]
+
     # Check if hosted bluetooth is being used
     if "esp32_hosted" in full_config:
+        if stack == STACK_NIMBLE:
+            raise cv.Invalid(
+                "stack: nimble is not supported together with esp32_hosted"
+            )
         add_idf_sdkconfig_option("CONFIG_BT_CLASSIC_ENABLED", False)
         add_idf_sdkconfig_option("CONFIG_BT_BLE_ENABLED", True)
         add_idf_sdkconfig_option("CONFIG_BT_BLUEDROID_ENABLED", True)
@@ -488,12 +525,6 @@ def final_validation(config) -> None:
     # Check if BLE Server is needed
     has_ble_server = "esp32_ble_server" in full_config
 
-    # ESP-IDF BLE stack requires GATT Server to be enabled when GATT Client is enabled
-    # This is an internal dependency in the Bluedroid stack
-    # See: https://github.com/espressif/esp-idf/issues/17724
-    add_idf_sdkconfig_option("CONFIG_BT_GATTS_ENABLE", has_ble_server or has_ble_client)
-    add_idf_sdkconfig_option("CONFIG_BT_GATTC_ENABLE", has_ble_client)
-
     # Handle max_connections: check for deprecated location in esp32_ble_tracker
     max_connections = config.get(CONF_MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS)
 
@@ -503,11 +534,58 @@ def final_validation(config) -> None:
         if "max_connections" in tracker_config and CONF_MAX_CONNECTIONS not in config:
             max_connections = tracker_config["max_connections"]
 
-    # Set CONFIG_BT_ACL_CONNECTIONS to the maximum connections needed + 1 for ADV/SCAN
-    # This is the Bluedroid host stack total instance limit (range 1-9, default 4)
-    # Total instances = ADV/SCAN (1) + connection slots (max_connections)
-    # Shared between client (tracker/ble_client) and server
-    add_idf_sdkconfig_option("CONFIG_BT_ACL_CONNECTIONS", max_connections + 1)
+    if stack == STACK_NIMBLE:
+        add_idf_sdkconfig_option("CONFIG_BT_BLUEDROID_ENABLED", False)
+        add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ENABLED", True)
+        # Bluedroid-only feature flags; written as disabled so the esp32
+        # reconciler does not enable them (their Kconfig deps are unmet).
+        add_idf_sdkconfig_option("CONFIG_BT_BLE_42_FEATURES_SUPPORTED", False)
+        add_idf_sdkconfig_option("CONFIG_BT_BLE_50_FEATURES_SUPPORTED", False)
+        # Enable only the NimBLE roles the configured components need.
+        has_tracker = "esp32_ble_tracker" in full_config
+        advertises = config[CONF_ADVERTISING] or has_ble_server
+        add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ROLE_CENTRAL", has_ble_client)
+        add_idf_sdkconfig_option(
+            "CONFIG_BT_NIMBLE_ROLE_OBSERVER", has_ble_client or has_tracker
+        )
+        add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ROLE_PERIPHERAL", advertises)
+        add_idf_sdkconfig_option(
+            "CONFIG_BT_NIMBLE_ROLE_BROADCASTER",
+            advertises or "esp32_ble_beacon" in full_config,
+        )
+        if has_ble_server:
+            # esp32_ble_server creates services at runtime
+            add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_DYNAMIC_SERVICE", True)
+        # The security manager only links when a connection role exists;
+        # broadcast-only builds (e.g. just esp32_ble_beacon) must disable it.
+        has_connect = has_ble_client or advertises
+        add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_SECURITY_ENABLE", has_connect)
+        if has_connect:
+            add_idf_sdkconfig_option(
+                "CONFIG_BT_NIMBLE_MAX_CONNECTIONS", max_connections
+            )
+            # Persist bonds in NVS (parity with Bluedroid behavior)
+            add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_NVS_PERSIST", True)
+            # Parity with Bluedroid's maximum ATT MTU (bluetooth_proxy relies
+            # on large MTUs for GATT throughput)
+            add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU", 517)
+            # ESPHome scan/GATT callbacks run in the NimBLE host task; give it
+            # the same headroom the Bluedroid BTU task gets.
+            add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE", 8192)
+    else:
+        # ESP-IDF BLE stack requires GATT Server to be enabled when GATT Client is enabled
+        # This is an internal dependency in the Bluedroid stack
+        # See: https://github.com/espressif/esp-idf/issues/17724
+        add_idf_sdkconfig_option(
+            "CONFIG_BT_GATTS_ENABLE", has_ble_server or has_ble_client
+        )
+        add_idf_sdkconfig_option("CONFIG_BT_GATTC_ENABLE", has_ble_client)
+
+        # Set CONFIG_BT_ACL_CONNECTIONS to the maximum connections needed + 1 for ADV/SCAN
+        # This is the Bluedroid host stack total instance limit (range 1-9, default 4)
+        # Total instances = ADV/SCAN (1) + connection slots (max_connections)
+        # Shared between client (tracker/ble_client) and server
+        add_idf_sdkconfig_option("CONFIG_BT_ACL_CONNECTIONS", max_connections + 1)
 
     # Set controller-specific max connections for ESP32 (classic)
     # CONFIG_BTDM_CTRL_BLE_MAX_CONN is ESP32-specific controller limit (just connections, not ADV/SCAN)
@@ -546,6 +624,10 @@ async def to_code(config):
     max_connections = config.get(CONF_MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS)
     cg.add_define("USE_ESP32_BLE_MAX_CONNECTIONS", max_connections)
 
+    nimble = config[CONF_STACK] == STACK_NIMBLE
+    if nimble:
+        cg.add_define("USE_ESP32_BLE_NIMBLE")
+
     request_bluetooth()
 
     # When PSRAM and BT are used together, Bluedroid should prefer SPIRAM for
@@ -556,24 +638,33 @@ async def to_code(config):
     #            design-guide/design-considerations.html
     if config.get(CONF_USE_PSRAM, False):
         cg.add_define("USE_ESP32_BLE_PSRAM")
-        # CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST is only available on ESP32
-        # (BTDM dual-mode controller). BLE-only SoCs (C3, S3, C2, H2) do not
-        # expose this Kconfig symbol; applying it there would cause a build error.
-        if get_esp32_variant() == const.VARIANT_ESP32:
-            add_idf_sdkconfig_option("CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST", True)
-        # CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY applies to all Bluedroid-enabled variants.
-        add_idf_sdkconfig_option("CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY", True)
+        if nimble:
+            add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL", True)
+        else:
+            # CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST is only available on ESP32
+            # (BTDM dual-mode controller). BLE-only SoCs (C3, S3, C2, H2) do not
+            # expose this Kconfig symbol; applying it there would cause a build error.
+            if get_esp32_variant() == const.VARIANT_ESP32:
+                add_idf_sdkconfig_option("CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST", True)
+            # CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY applies to all Bluedroid-enabled variants.
+            add_idf_sdkconfig_option("CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY", True)
 
     # Register the core BLE loggers that are always needed
     register_bt_logger(BTLoggers.GAP, BTLoggers.BTM, BTLoggers.HCI)
 
     # Apply logger settings if log disabling is enabled
     if config.get(CONF_DISABLE_BT_LOGS, False):
-        # Disable all Bluetooth loggers that are not required
-        required_loggers = _get_required_loggers()
-        for logger in BTLoggers:
-            if logger not in required_loggers:
-                add_idf_sdkconfig_option(f"{logger.value}_NONE", True)
+        if nimble:
+            # NimBLE has a single log-level choice instead of per-subsystem
+            # loggers; keep errors visible (parity with the Bluedroid arm,
+            # which never silences its required GAP/BTM/HCI loggers).
+            add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_LOG_LEVEL_ERROR", True)
+        else:
+            # Disable all Bluetooth loggers that are not required
+            required_loggers = _get_required_loggers()
+            for logger in BTLoggers:
+                if logger not in required_loggers:
+                    add_idf_sdkconfig_option(f"{logger.value}_NONE", True)
 
     # Set BLE connection establishment timeout to match aioesphomeapi/bleak-retry-connector
     # Default is 20 seconds instead of ESP-IDF's 30 seconds. Because there is no way to
@@ -582,17 +673,26 @@ async def to_code(config):
     # attempts and wasting valuable connection slots.
     if CONF_CONNECTION_TIMEOUT in config:
         timeout_seconds = int(config[CONF_CONNECTION_TIMEOUT].total_seconds)
-        add_idf_sdkconfig_option("CONFIG_BT_BLE_ESTAB_LINK_CONN_TOUT", timeout_seconds)
-        # Increase GATT client connection retry count for problematic devices
-        # Default in ESP-IDF is 3, we increase to 10 for better reliability with
-        # low-power/timing-sensitive devices
-        add_idf_sdkconfig_option("CONFIG_BT_GATTC_CONNECT_RETRY_COUNT", 10)
+        if nimble:
+            # NimBLE takes the connect timeout per ble_gap_connect() call;
+            # the facade reads it from this define.
+            cg.add_define("USE_ESP32_BLE_CONNECTION_TIMEOUT_MS", timeout_seconds * 1000)
+        else:
+            add_idf_sdkconfig_option(
+                "CONFIG_BT_BLE_ESTAB_LINK_CONN_TOUT", timeout_seconds
+            )
+            # Increase GATT client connection retry count for problematic devices
+            # Default in ESP-IDF is 3, we increase to 10 for better reliability with
+            # low-power/timing-sensitive devices
+            add_idf_sdkconfig_option("CONFIG_BT_GATTC_CONNECT_RETRY_COUNT", 10)
 
     # Set the maximum number of notification registrations
     # This controls how many BLE characteristics can have notifications enabled
     # across all connections for a single GATT client interface
     # https://github.com/esphome/issues/issues/6808
-    if CONF_MAX_NOTIFICATIONS in config:
+    # NimBLE delivers notifications without per-handle registration, so the
+    # option has no effect there.
+    if CONF_MAX_NOTIFICATIONS in config and not nimble:
         add_idf_sdkconfig_option(
             "CONFIG_BT_GATTC_NOTIF_REG_MAX", config[CONF_MAX_NOTIFICATIONS]
         )

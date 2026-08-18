@@ -1,0 +1,21 @@
+esphome:
+  name: test
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+esp32_ble:
+  stack: nimble
+  max_connections: 4
+
+esp32_ble_tracker:
+
+esp32_ble_server:
+  services:
+    - uuid: 2935464f-dead-beef-cafe-123456789abc
+      characteristics:
+        - uuid: 2935464f-dead-beef-cafe-123456789abd
+          read: true
+          value: [1]

@@ -8,7 +8,7 @@
 #ifndef CONFIG_ESP_HOSTED_ENABLE_BT_BLUEDROID
 #include <esp_bt.h>
 #endif
-#include <esp_gap_ble_api.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 
 namespace esphome::esp32_ble_beacon {
 

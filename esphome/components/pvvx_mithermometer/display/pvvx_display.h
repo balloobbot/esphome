@@ -11,7 +11,7 @@
 
 #include <cinttypes>
 
-#include <esp_gattc_api.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 #ifdef USE_TIME
 #include "esphome/components/time/real_time_clock.h"
 #endif

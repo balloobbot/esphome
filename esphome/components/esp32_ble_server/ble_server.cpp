@@ -9,12 +9,11 @@
 
 #include <nvs_flash.h>
 #include <freertos/FreeRTOSConfig.h>
-#include <esp_bt_main.h>
 #ifndef CONFIG_ESP_HOSTED_ENABLE_BT_BLUEDROID
 #include <esp_bt.h>
 #endif
 #include <freertos/task.h>
-#include <esp_gap_ble_api.h>
+#include "esphome/components/esp32_ble/ble_stack_api.h"
 
 namespace esphome::esp32_ble_server {
 
