@@ -15,6 +15,10 @@
 #if defined(USE_RP2040_BLE)
 #include "bluetooth_connection_rp2.h"
 #define ESPHOME_BLE_GATT_CONNECTION_TYPE bluetooth_connection::RP2GattClient
+#elif defined(USE_ESP32_BLE) && defined(USE_ESP32_BLE_NIMBLE)
+// Must precede the Bluedroid arm: NimBLE builds also define USE_ESP32_BLE.
+#include "bluetooth_connection_nimble.h"
+#define ESPHOME_BLE_GATT_CONNECTION_TYPE bluetooth_connection::NimbleGattClient
 #elif defined(USE_ESP32_BLE)
 #include "bluetooth_connection_bluedroid.h"
 #define ESPHOME_BLE_GATT_CONNECTION_TYPE bluetooth_connection::BluedroidGattClient

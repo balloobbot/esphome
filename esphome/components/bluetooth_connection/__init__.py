@@ -57,6 +57,7 @@ RP2GattClient = bluetooth_connection_ns.class_("RP2GattClient", cg.Component)
 BluedroidGattClient = bluetooth_connection_ns.class_(
     "BluedroidGattClient", cg.Component
 )
+NimbleGattClient = bluetooth_connection_ns.class_("NimbleGattClient", cg.Component)
 
 CONF_BACKEND_ID = "backend_id"
 
@@ -247,6 +248,14 @@ async def new_gatt_backend(
     ble_device_base.request_gatt_client()
     if service_table:
         cg.add_define("USE_BLE_GATT_SERVICE_TABLE")
+    if CORE.is_esp32:
+        # The esp32 backend follows the host stack: the declared id keeps the
+        # Bluedroid type from validation and is re-typed here for NimBLE
+        # (stack selection is only final at codegen).
+        from esphome.components import esp32_ble
+
+        if esp32_ble.get_stack() == esp32_ble.STACK_NIMBLE:
+            config[CONF_BACKEND_ID].type = NimbleGattClient
     backend = cg.new_Pvariable(config[CONF_BACKEND_ID])
     # The backend is the slot's real Component: component keys from the
     # connection entry (setup_priority, ...) apply to it. Consumers whose own
@@ -261,6 +270,7 @@ async def new_gatt_backend(
 # list (this module cannot import bluetooth_proxy to derive it).
 SOURCE_FILE_FRAMEWORKS: dict[str, set[PlatformFramework]] = {
     "bluetooth_connection_bluedroid.cpp": frameworks_for_platforms([PLATFORM_ESP32]),
+    "bluetooth_connection_nimble.cpp": frameworks_for_platforms([PLATFORM_ESP32]),
     "gatt_service_table_bluedroid.cpp": frameworks_for_platforms([PLATFORM_ESP32]),
     # Every hub platform the proxy admits (the file compiles empty where
     # USE_BLE_GATT_CLIENT is not defined), so a platform gaining a backend

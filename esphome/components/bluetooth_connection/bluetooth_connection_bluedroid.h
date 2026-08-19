@@ -9,7 +9,7 @@
 
 #include "esphome/core/defines.h"
 
-#if defined(USE_ESP32_BLE) && defined(USE_BLE_GATT_CLIENT)
+#if defined(USE_ESP32_BLE) && !defined(USE_ESP32_BLE_NIMBLE) && defined(USE_BLE_GATT_CLIENT)
 
 #include "bluetooth_connection.h"
 #include "gatt_service_table_bluedroid.h"
