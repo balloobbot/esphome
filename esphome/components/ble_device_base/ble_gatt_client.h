@@ -143,6 +143,41 @@ concept BLEGattConnectionContract = requires(T conn, GattClientListener *listene
   { conn.set_connection_type(ConnectionType{}) } -> std::same_as<void>;
 };
 
+// ---- service table lookup helpers ----
+//
+// Neutral, bounds-checked walks over a materialized GattServiceTable for
+// direct consumers that resolve a known device's handles by UUID (streaming
+// consumers forward the raw database and never need these). Linear search:
+// the table exists only between discovery and release_services(), for one
+// small known device.
+
+/// Client Characteristic Configuration descriptor UUID (Bluetooth spec).
+static constexpr uint16_t CCCD_UUID = 0x2902;
+
+// Characteristic property bits (the Bluetooth-spec declaration byte carried
+// in GattCharacteristic::properties; the ESP-IDF macros for these do not
+// exist on the other platforms).
+static constexpr uint8_t GATT_CHAR_PROP_WRITE_NO_RSP = 0x04;
+static constexpr uint8_t GATT_CHAR_PROP_WRITE = 0x08;
+
+inline const GattService *find_service(const GattServiceTable &table, const ESPBTUUID &uuid) {
+  for (uint16_t i = 0; i < table.service_count; i++) {
+    if (table.services[i].uuid == uuid)
+      return &table.services[i];
+  }
+  return nullptr;
+}
+
+const GattCharacteristic *find_characteristic(const GattServiceTable &table, const GattService &service,
+                                              const ESPBTUUID &uuid);
+
+const GattDescriptor *find_descriptor(const GattServiceTable &table, const GattCharacteristic &characteristic,
+                                      const ESPBTUUID &uuid);
+
+/// Handle of the characteristic's Client Characteristic Configuration
+/// descriptor (0x2902), or 0 when it has none.
+uint16_t find_cccd(const GattServiceTable &table, const GattCharacteristic &characteristic);
+
 }  // namespace esphome::ble_device_base
 
 #endif  // USE_BLE_GATT_CLIENT
